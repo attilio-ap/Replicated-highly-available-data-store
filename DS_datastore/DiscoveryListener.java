@@ -26,7 +26,7 @@ public class DiscoveryListener implements Runnable {
                             DiscoveryMessage msg = (DiscoveryMessage) obj;
                             if (msg.getType() == DiscoveryMessage.Type.JOIN_REQUEST) {
                                 // Crea il PeerInfo per il nuovo nodo usando serverId, host e replicationPort ricevuti.
-                                PeerInfo newPeer = new PeerInfo(msg.getServerId(), msg.getHost(), msg.getReplicationPort());
+                                PeerInfo newPeer = new PeerInfo(msg.getServerId(), msg.getHost(), msg.getReplicationPort(), msg.getDiscoveryPort(), msg.getStateTransferPort());
                                 server.addPeer(newPeer);
 
                                 // Prepara la lista dei peer da inviare come risposta.
@@ -37,7 +37,7 @@ public class DiscoveryListener implements Runnable {
                                 // Ottieni l'host locale (puoi usare InetAddress.getLocalHost() oppure avere già salvato l'host nel Server).
                                 String selfHost = InetAddress.getLocalHost().getHostAddress();
                                 // Crea il PeerInfo per il server attuale (self).
-                                PeerInfo selfPeer = new PeerInfo(server.getServerId(), selfHost, server.getReplicationPort());
+                                PeerInfo selfPeer = new PeerInfo(server.getServerId(), selfHost, server.getReplicationPort(), server.getDiscoveryPort(), server.getStateTransferPort());
                                 responseList.add(selfPeer);
 
                                 // Aggiungi gli altri peer (escludi il nodo che ha inviato la richiesta, per evitare duplicati).

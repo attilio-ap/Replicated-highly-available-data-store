@@ -5,12 +5,16 @@ import java.io.Serializable;
 public class PeerInfo implements Serializable {
     private String serverId;
     private String host;
-    private int port;
+    private int replicationPort;
+    private int discoveryPort;
+    private int stateTransferPort;
 
-    public PeerInfo(String serverId, String host, int port) {
+    public PeerInfo(String serverId, String host, int replicationPort, int discoveryPort, int stateTransferPort) {
         this.serverId = serverId;
         this.host = host;
-        this.port = port;
+        this.replicationPort = replicationPort;
+        this.discoveryPort = discoveryPort;
+        this.stateTransferPort = stateTransferPort;
     }
 
     public String getServerId() {
@@ -21,13 +25,21 @@ public class PeerInfo implements Serializable {
         return host;
     }
 
-    public int getPort() {
-        return port;
+    public int getReplicationPort() {
+        return replicationPort;
+    }
+
+    public int getStateTransferPort(){
+        return stateTransferPort;
+    }
+
+    public int getDiscoveryPort() {
+        return discoveryPort;
     }
 
     @Override
     public String toString() {
-        return serverId + "@" + host + ":" + port;
+        return serverId + "@" + host + ":" + replicationPort;
     }
 }
 

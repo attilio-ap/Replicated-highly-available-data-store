@@ -84,7 +84,7 @@ public class Server {
         } catch (UnknownHostException e) {
             selfHost = "localhost"; // fallback
         }
-        PeerInfo selfPeer = new PeerInfo(serverId, selfHost, replicationPort);
+        PeerInfo selfPeer = new PeerInfo(serverId, selfHost, replicationPort, discoveryPort, stateTransferPort);
 
         ReplicableMessage newPeerMsg = new DiscoveryMessage(DiscoveryMessage.Type.NEW_PEER, selfPeer);
 
@@ -92,7 +92,7 @@ public class Server {
         for (PeerInfo peer : getPeerServers()) {
             if (!peer.getServerId().equals(this.serverId) && (seedPeer == null || !peer.equals(seedPeer))) {
                 // usa quella; qui supponiamo che ogni peer ascolti sul proprio discoveryPort.
-                int peerDiscoveryPort = determineDiscoveryPort(peer);
+                int peerDiscoveryPort = peer.getDiscoveryPort();
                 new Thread(() -> {
                     try (Socket socket = new Socket(peer.getHost(), peerDiscoveryPort);
                          ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
@@ -109,11 +109,6 @@ public class Server {
         }
     }
 
-    // Metodo helper per determinare la porta di discovery del peer
-    public int determineDiscoveryPort(PeerInfo peer) {
-        return peer.getPort() + 5;
-    }
-
 
 
     // This method contacts the seed server and obtains the list of known peers.
@@ -124,7 +119,7 @@ public class Server {
 
             // Create and send a JOIN_REQUEST using DiscoveryMessage.
             DiscoveryMessage joinRequest = new DiscoveryMessage(DiscoveryMessage.Type.JOIN_REQUEST,
-                    serverId, InetAddress.getLocalHost().getHostAddress(), replicationPort, clientPort);
+                    serverId, InetAddress.getLocalHost().getHostAddress(), replicationPort, discoveryPort, stateTransferPort);
             out.writeObject(joinRequest);
             out.flush();
 
@@ -134,13 +129,9 @@ public class Server {
                 DiscoveryMessage response = (DiscoveryMessage) responseObj;
                 if (response.getType() == DiscoveryMessage.Type.JOIN_RESPONSE) {
                     List<PeerInfo> discoveredPeers = response.getPeerList();
-                    if (!discoveredPeers.isEmpty()) {
-                        // Supponiamo che il primo elemento della lista sia il seed
-                        this.seedPeer = discoveredPeers.get(0);
-                    }
                     for (PeerInfo peer : discoveredPeers) {
 
-                        if(peer.getHost().equals(this.seedHost) && (peer.getPort() + 5) == this.seedDiscoveryPort) {
+                        if(peer.getHost().equals(this.seedHost) && (peer.getDiscoveryPort()) == this.seedDiscoveryPort) {
                             this.seedPeer = peer;
                         }
 
@@ -161,10 +152,10 @@ public class Server {
 
     public synchronized void addPeer(PeerInfo peer) {
         boolean exists = peerServers.stream()
-                .anyMatch(p -> p.getHost().equals(peer.getHost()) && p.getPort() == peer.getPort());
+                .anyMatch(p -> p.getHost().equals(peer.getHost()) && p.getReplicationPort() == peer.getReplicationPort());
         if (!exists) {
             peerServers.add(peer);
-            System.out.println("Added new peer: " + peer.getHost() + ":" + peer.getPort());
+            System.out.println("Added new peer: " + peer.getHost() + ":" + peer.getReplicationPort());
         }
     }
 
@@ -178,8 +169,7 @@ public class Server {
         // Pick the first peer.
         PeerInfo peer = peerServers.get(0);
         try {
-            // Assume the peer's state transfer port is replicationPort + 1000.
-            int peerStatePort = peer.getPort() + 1000;
+            int peerStatePort = peer.getStateTransferPort();
             try (Socket socket = new Socket(peer.getHost(), peerStatePort);
                  ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
                  ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
@@ -221,12 +211,12 @@ public class Server {
     public void replicateUpdate(UpdateMessage update) {
         for (PeerInfo peer : peerServers) {
             new Thread(() -> {
-                try (Socket socket = new Socket(peer.getHost(), peer.getPort());
+                try (Socket socket = new Socket(peer.getHost(), peer.getReplicationPort());
                      ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
                     out.writeObject(update);
                     out.flush();
                 } catch (Exception e) {
-                    System.err.println("Replication to " + peer.getHost() + ":" + peer.getPort() + " failed: " + e.getMessage());
+                    System.err.println("Replication to " + peer.getHost() + ":" + peer.getReplicationPort() + " failed: " + e.getMessage());
                     pendingReplications.computeIfAbsent(peer, k -> new ArrayList<>()).add(update);
                 }
             }).start();
@@ -237,6 +227,7 @@ public class Server {
         if (localClock.canApply(update.getOriginServerId(), update.getVectorClock())) {
             keyValueStore.write(update.getKey(), update.getValue(), update.getVectorClock());
             localClock.merge(update.getVectorClock());
+            System.out.println(localClock.toString());
             System.out.println("Remote update applied for key: " + update.getKey() + " value: " + update.getValue() + " VC: " + update.getVectorClock());
             checkPendingUpdates();
         } else {
@@ -284,6 +275,16 @@ public class Server {
     public int getReplicationPort() {
         return replicationPort;
     }
+
+    public int getDiscoveryPort() {
+        return discoveryPort;
+    }
+
+    public int getStateTransferPort() {
+        return stateTransferPort;
+    }
+
+
 
 
 }

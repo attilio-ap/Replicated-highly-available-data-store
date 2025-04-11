@@ -14,15 +14,19 @@ public class DiscoveryMessage implements ReplicableMessage {
     private String serverId; // Usato per JOIN_REQUEST
     private String host;     // Usato per JOIN_REQUEST
     private int replicationPort; // Usato per JOIN_REQUEST
+    private int discoveryPort;
+    private int stateTransferPort;
     private List<PeerInfo> peerList; // Usato per JOIN_RESPONSE
     private PeerInfo newPeer; // Usato per NEW_PEER
 
     // Costruttore per JOIN_REQUEST
-    public DiscoveryMessage(Type type, String serverId, String host, int replicationPort, int clientPort) {
+    public DiscoveryMessage(Type type, String serverId, String host, int replicationPort, int discoveryPort, int stateTransferPort) {
         this.type = type;
         this.serverId = serverId;
         this.host = host;
         this.replicationPort = replicationPort;
+        this.discoveryPort = discoveryPort;
+        this.stateTransferPort = stateTransferPort;
         // Il clientPort può essere usato se necessario
     }
 
@@ -53,6 +57,12 @@ public class DiscoveryMessage implements ReplicableMessage {
 
     public int getReplicationPort() {
         return replicationPort;
+    }
+    public int getStateTransferPort() {
+        return stateTransferPort;
+    }
+    public int getDiscoveryPort() {
+        return discoveryPort;
     }
 
     public List<PeerInfo> getPeerList() {

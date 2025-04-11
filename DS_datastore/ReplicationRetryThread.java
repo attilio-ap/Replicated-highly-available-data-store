@@ -28,7 +28,7 @@ public class ReplicationRetryThread implements Runnable {
                 List<ReplicableMessage> messages = new ArrayList<>(pendingMap.get(peer));
                 for (ReplicableMessage msg : messages) {
                     // Determina la porta di destinazione; per DiscoveryMessage, potresti usare la stessa logica usata in broadcastMyPresence
-                    int destPort = (msg instanceof DiscoveryMessage) ? server.determineDiscoveryPort(peer) : peer.getPort();
+                    int destPort = (msg instanceof DiscoveryMessage) ? peer.getDiscoveryPort() : peer.getReplicationPort();
                     try (Socket socket = new Socket(peer.getHost(), destPort);
                          ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
                         out.writeObject(msg);
