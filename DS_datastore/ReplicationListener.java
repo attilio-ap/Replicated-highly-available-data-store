@@ -4,17 +4,15 @@ import java.net.*;
 import java.io.*;
 
 public class ReplicationListener implements Runnable {
-    private int port;
     private Server server;
 
-    public ReplicationListener(int port, Server server) {
-        this.port = port;
+    public ReplicationListener(Server server) {
         this.server = server;
     }
 
     public void run() {
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.println("Replication listener started on port " + port);
+        try (ServerSocket serverSocket = new ServerSocket(server.getReplicationPort())) {
+            System.out.println("Replication listener started on port " + server.getReplicationPort());
             while (true) {
                 Socket socket = serverSocket.accept();
                 new Thread(() -> {

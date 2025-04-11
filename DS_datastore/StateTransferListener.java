@@ -4,17 +4,15 @@ import java.net.*;
 import java.io.*;
 
 public class StateTransferListener implements Runnable {
-    private int stateTransferPort;
     private Server server;
 
-    public StateTransferListener(int stateTransferPort, Server server) {
-        this.stateTransferPort = stateTransferPort;
+    public StateTransferListener(Server server) {
         this.server = server;
     }
 
     public void run() {
-        try (ServerSocket serverSocket = new ServerSocket(stateTransferPort)) {
-            System.out.println("StateTransfer listener started on port " + stateTransferPort);
+        try (ServerSocket serverSocket = new ServerSocket(server.getStateTransferPort())) {
+            System.out.println("StateTransfer listener started on port " + server.getStateTransferPort());
             while (true) {
                 Socket socket = serverSocket.accept();
                 new Thread(() -> {

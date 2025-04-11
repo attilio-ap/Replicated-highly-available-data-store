@@ -50,13 +50,13 @@ public class Server {
         new Thread(new ClientListener(clientPort, this)).start();
 
         // Start replication listener thread.
-        new Thread(new ReplicationListener(replicationPort, this)).start();
+        new Thread(new ReplicationListener(this)).start();
 
         // Start discovery listener thread.
-        new Thread(new DiscoveryListener(discoveryPort, this)).start();
+        new Thread(new DiscoveryListener(this)).start();
 
         // Start state transfer listener thread.
-        new Thread(new StateTransferListener(stateTransferPort, this)).start();
+        new Thread(new StateTransferListener(this)).start();
 
         // Start a thread to check pending updates periodically.
         new Thread(new PendingUpdateChecker(this)).start();

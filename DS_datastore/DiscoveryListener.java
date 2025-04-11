@@ -5,17 +5,15 @@ import java.io.*;
 import java.util.*;
 
 public class DiscoveryListener implements Runnable {
-    private int discoveryPort;
     private Server server;
 
-    public DiscoveryListener(int discoveryPort, Server server) {
-        this.discoveryPort = discoveryPort;
+    public DiscoveryListener( Server server) {
         this.server = server;
     }
 
     public void run() {
-        try (ServerSocket serverSocket = new ServerSocket(discoveryPort)) {
-            System.out.println("Discovery listener started on port " + discoveryPort);
+        try (ServerSocket serverSocket = new ServerSocket(server.getDiscoveryPort())) {
+            System.out.println("Discovery listener started on port " + server.getDiscoveryPort());
             while (true) {
                 Socket socket = serverSocket.accept();
                 new Thread(() -> {
