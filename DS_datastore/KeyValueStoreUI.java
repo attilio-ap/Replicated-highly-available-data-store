@@ -10,6 +10,15 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.Socket;
 
+/**
+ * A graphical user interface (GUI) client for interacting with a key-value store server.
+ * <p>
+ * This class provides fields to enter server connection information, key-value inputs,
+ * and buttons to perform READ, WRITE, and SHOW operations. It uses TCP socket connections
+ * to send commands and receive responses from the server.
+ * <p>
+ * The UI is built using Java Swing and includes real-time display of server responses.
+ */
 public class KeyValueStoreUI extends JFrame {
 
     private JTextField serverField;
@@ -21,7 +30,12 @@ public class KeyValueStoreUI extends JFrame {
     private JButton writeButton;
     private JButton showButton;
 
-
+    /**
+     * Constructs and initializes the Key-Value Store UI window.
+     * <p>
+     * It configures the look and feel (using Nimbus if available),
+     * sets up the layout, and initializes action listeners.
+     */
     public KeyValueStoreUI() {
         // Set Nimbus Look-and-Feel if available
         try {
@@ -43,6 +57,10 @@ public class KeyValueStoreUI extends JFrame {
         buildUI();
     }
 
+    /**
+     * Builds the user interface by composing Swing panels, fields, and buttons.
+     * The layout includes connection fields, input fields, and a server response display.
+     */
     private void buildUI() {
         // Main panel with padding
         JPanel mainPanel = new JPanel(new BorderLayout());
@@ -95,7 +113,7 @@ public class KeyValueStoreUI extends JFrame {
         writeButton = new JButton("WRITE");
         writeButton.setToolTipText("Click to store a key-value pair");
 
-        // Aggiungi il nuovo bottone SHOW
+        // Add  button
         showButton = new JButton("SHOW");
         showButton.setToolTipText("Click to print all key-value pairs stored in the server");
 
@@ -126,6 +144,9 @@ public class KeyValueStoreUI extends JFrame {
         addActionListeners();
     }
 
+    /**
+     * Adds listeners to the READ, WRITE, and SHOW buttons to trigger network operations.
+     */
     private void addActionListeners() {
         // READ operation
         readButton.addActionListener(e -> {
@@ -144,7 +165,7 @@ public class KeyValueStoreUI extends JFrame {
             performWrite(server, port, key, value);
         });
 
-        // SHOW operation: invia il comando "SHOW" per richiedere lo stato completo
+        // SHOW operation: send "SHOW" to request complete state
         showButton.addActionListener(e -> {
             String server = serverField.getText().trim();
             int port = Integer.parseInt(portField.getText().trim());
@@ -152,16 +173,21 @@ public class KeyValueStoreUI extends JFrame {
         });
     }
 
-    // Method to perform a SHOW operation via a socket connection
+    /**
+     * Sends a SHOW command to the server and appends the full key-value store to the output area.
+     *
+     * @param host the server host
+     * @param port the server port
+     */
     private void performShow(String host, int port) {
         try (Socket socket = new Socket(host, port);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
              BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
 
-            // Invia il comando "SHOW" al server
+            // Send "SHOW" to server
             out.println("SHOW");
 
-            // Legge tutte le linee di risposta dal server e le visualizza nell'outputArea
+            // Reads responses and visualizes them in outputArea
             String line;
             outputArea.append("SHOW Response:\n");
             while ((line = in.readLine()) != null) {
@@ -173,7 +199,14 @@ public class KeyValueStoreUI extends JFrame {
     }
 
 
-    // Method to perform a READ operation via a socket connection
+    /**
+     * Sends a READ command to the server using the given key.
+     * Displays the value in the output area.
+     *
+     * @param host the server host
+     * @param port the server port
+     * @param key  the key to read
+     */
     private void performRead(String host, int port, String key) {
         try (Socket socket = new Socket(host, port);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
@@ -188,7 +221,15 @@ public class KeyValueStoreUI extends JFrame {
         }
     }
 
-    // Method to perform a WRITE operation via a socket connection
+    /**
+     * Sends a WRITE command to the server with the given key and value.
+     * Displays the server response in the output area.
+     *
+     * @param host  the server host
+     * @param port  the server port
+     * @param key   the key to write
+     * @param value the value to associate with the key
+     */
     private void performWrite(String host, int port, String key, String value) {
         try (Socket socket = new Socket(host, port);
              PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
@@ -203,6 +244,12 @@ public class KeyValueStoreUI extends JFrame {
         }
     }
 
+    /**
+     * Entry point of the application.
+     * Launches the Key-Value Store UI.
+     *
+     * @param args command-line arguments (not used)
+     */
     public static void main(String[] args) {
         SwingUtilities.invokeLater(() -> {
             KeyValueStoreUI ui = new KeyValueStoreUI();

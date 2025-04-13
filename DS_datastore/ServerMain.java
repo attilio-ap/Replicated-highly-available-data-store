@@ -2,7 +2,37 @@ package DS_datastore;
 
 import java.util.*;
 
+/**
+ * Entry point for launching a server in the distributed key-value store system.
+ * <p>
+ * This class parses command-line arguments, assigns ports based on the server ID,
+ * initializes the server configuration, and starts the server.
+ * <p>
+ * Usage:
+ * <pre>
+ *     java DS_datastore.ServerMain &lt;serverId&gt; [&lt;seedHost&gt; &lt;seedDiscoveryPort&gt;]
+ * </pre>
+ * Example:
+ * <pre>
+ *     java DS_datastore.ServerMain server2 192.168.1.100 8090
+ * </pre>
+ *
+ * Available server IDs: {@code server1}, {@code server2}, {@code server3}
+ */
 public class ServerMain {
+
+    /**
+     * Main method that starts the server.
+     * <p>
+     * It expects at least one argument:
+     * <ul>
+     *     <li>{@code serverId}: one of {@code server1}, {@code server2}, or {@code server3}</li>
+     *     <li>{@code seedHost} (optional): the IP/host of a known server to join the network</li>
+     *     <li>{@code seedDiscoveryPort} (optional): the discovery port of the seed server</li>
+     * </ul>
+     *
+     * @param args command-line arguments to configure the server
+     */
     public static void main(String[] args) {
         // Usage: java DS_datastore.ServerMain <serverId> [<seedHost> <seedDiscoveryPort>]
         if (args.length < 1) {
@@ -43,6 +73,7 @@ public class ServerMain {
             return;
         }
 
+        // Instantiate and start the server
         Server server = new Server(serverId, clientPort, replicationPort, discoveryPort, stateTransferPort,
                 initialServerIds, peerServers, seedHost, seedDiscoveryPort);
         server.start();

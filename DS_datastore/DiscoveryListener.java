@@ -4,9 +4,27 @@ import java.net.*;
 import java.io.*;
 import java.util.*;
 
+/**
+ * Handles discovery-related communication between peer servers in a distributed system.
+ * <p>
+ * This listener accepts discovery messages (such as JOIN_REQUEST or NEW_PEER),
+ * processes them accordingly, and replies with appropriate peer information.
+ * <p>
+ * Intended to be run on a dedicated thread via the {@link Runnable} interface.
+ */
 public class DiscoveryListener implements Runnable {
+    /** Reference to the main server instance for accessing peer management and ports. */
     private Server server;
 
+    /**
+     * Determines the correct local IPv4 address of the machine.
+     * <p>
+     * It filters out loopback, virtual, and inactive interfaces, and searches for
+     * an address starting with "192.168.1.", which is commonly used in local networks.
+     *
+     * @return the local IP address as a string, or "IP not founded" if none is found
+     * @throws SocketException if an I/O error occurs while querying the network interfaces
+     */
     public static String getCorrectIP() throws SocketException {
         return java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces()).stream()
                 .filter(i -> {
@@ -23,11 +41,25 @@ public class DiscoveryListener implements Runnable {
                 .orElse("IP not founded");
     }
 
-
+    /**
+     * Constructs a new DiscoveryListener.
+     *
+     * @param server the server instance managing the distributed peer system
+     */
     public DiscoveryListener( Server server) {
         this.server = server;
     }
 
+    /**
+     * Starts the discovery listener on the server's discovery port.
+     * <p>
+     * For each incoming discovery connection, a new thread is spawned to handle:
+     * <ul>
+     *     <li><b>JOIN_REQUEST</b>: adds the requesting peer and replies with the current peer list (excluding the requester).</li>
+     *     <li><b>NEW_PEER</b>: registers a newly joined peer across the system.</li>
+     * </ul>
+     * If any other type of message is received or if an error occurs, it is logged.
+     */
     public void run() {
         try (ServerSocket serverSocket = new ServerSocket(server.getDiscoveryPort())) {
             System.out.println("Discovery listener started on port " + server.getDiscoveryPort());
@@ -40,30 +72,31 @@ public class DiscoveryListener implements Runnable {
                         if (obj instanceof DiscoveryMessage) {
                             DiscoveryMessage msg = (DiscoveryMessage) obj;
                             if (msg.getType() == DiscoveryMessage.Type.JOIN_REQUEST) {
-                                // Crea il PeerInfo per il nuovo nodo usando serverId, host e replicationPort ricevuti.
+                                // Create the PeerInfo for the new node using the received serverId, host, and replicationPort.
                                 PeerInfo newPeer = new PeerInfo(msg.getServerId(), msg.getHost(), msg.getReplicationPort(), msg.getDiscoveryPort(), msg.getStateTransferPort());
                                 server.addPeer(newPeer);
                                 server.getLocalClock().addServer(newPeer.getServerId());
 
-                                // Prepara la lista dei peer da inviare come risposta.
-                                // Includi le informazioni del server che riceve la richiesta (cioè self) e gli altri peer già noti,
-                                // escludendo il nodo che ha inviato la JOIN_REQUEST.
+                                // Prepare the list of peers to include in the response.
+                                // Include the information of the server receiving the request (i.e., self) and all other known peers,
+                                // excluding the node that sent the JOIN_REQUEST.
+
                                 List<PeerInfo> responseList = new ArrayList<>();
 
-                                // Ottieni l'host locale (puoi usare InetAddress.getLocalHost() oppure avere già salvato l'host nel Server).
+                                // Get the local host (you can use InetAddress.getLocalHost() or use the host already stored in the Server).
                                 String selfHost = getCorrectIP();
-                                // Crea il PeerInfo per il server attuale (self).
+                                // Create the PeerInfo for the current server (self).
                                 PeerInfo selfPeer = new PeerInfo(server.getServerId(), selfHost, server.getReplicationPort(), server.getDiscoveryPort(), server.getStateTransferPort());
                                 responseList.add(selfPeer);
 
-                                // Aggiungi gli altri peer (escludi il nodo che ha inviato la richiesta, per evitare duplicati).
+                                // Add the other peers (exclude the node that sent the request to avoid duplicates).
                                 for (PeerInfo p : server.getPeerServers()) {
                                     if (!p.getServerId().equals(msg.getServerId())) {
                                         responseList.add(p);
                                     }
                                 }
 
-                                // Invia la risposta con la lista dei peer.
+                                // Send the response containing the list of peers.
                                 DiscoveryMessage response = new DiscoveryMessage(DiscoveryMessage.Type.JOIN_RESPONSE, responseList);
                                 out.writeObject(response);
                                 out.flush();
@@ -71,7 +104,7 @@ public class DiscoveryListener implements Runnable {
                             }
                             if (msg.getType() == DiscoveryMessage.Type.NEW_PEER) {
                                 PeerInfo newPeer = msg.getNewPeer();
-                                // Aggiungi solo se non già presente
+                                // Add only if not present
                                 server.addPeer(newPeer);
                                 server.getLocalClock().addServer(newPeer.getServerId());
                                 System.out.println("Ricevuto NEW_PEER: " + newPeer);

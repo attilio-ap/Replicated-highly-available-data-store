@@ -5,22 +5,69 @@ import java.net.*;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * Represents a server node in a distributed key-value store system.
+ * <p>
+ * Each server handles:
+ * <ul>
+ *     <li>Client requests via TCP</li>
+ *     <li>Replication of updates to peer servers</li>
+ *     <li>Peer discovery and joining the network via a seed node</li>
+ *     <li>State recovery from peers during startup</li>
+ *     <li>Managing and applying updates with vector clocks</li>
+ * </ul>
+ * This class is the central orchestrator of all listener threads, replication mechanisms,
+ * state recovery, and update consistency.
+ */
 public class Server {
+    /** Unique identifier of this server. */
     private String serverId;
-    private int clientPort;          // For client connections.
-    private int replicationPort;     // For server-to-server updates.
-    private int discoveryPort;       // For discovery messages.
-    private int stateTransferPort;   // For state recovery.
-    private Set<String> allServerIds;
-    private KeyValueStore keyValueStore;
-    private VectorClock localClock;
-    private List<PeerInfo> peerServers; // Information about other servers.
 
-    // New fields for peer discovery
-    private String seedHost;         // IP address of an active server (if any)
-    private int seedDiscoveryPort;   // Its discovery port
+    /** Port for handling client connections. */
+    private int clientPort;
+
+    /** Port for replication traffic from other servers. */
+    private int replicationPort;
+
+    /** Port for peer discovery communication. */
+    private int discoveryPort;
+
+    /** Port for state transfer operations. */
+    private int stateTransferPort;
+
+    /** Set of all server IDs in the system. */
+    private Set<String> allServerIds;
+
+    /** In-memory key-value store. */
+    private KeyValueStore keyValueStore;
+
+    /** Local vector clock for causal consistency. */
+    private VectorClock localClock;
+
+    /** List of peer server information. */
+    private List<PeerInfo> peerServers;
+
+    /** Hostname or IP of a known server to join an existing network (optional). */
+    private String seedHost;
+
+    /** Discovery port of the seed server. */
+    private int seedDiscoveryPort;
+
+    /** Reference to the peer info of the seed node (set during joining). */
     private PeerInfo seedPeer;
 
+    /** List of updates that are waiting for causal readiness. */
+    private final List<UpdateMessage> pendingUpdates = new ArrayList<>();
+
+    /** Pending replication messages for retry in case of failure. */
+    private final Map<PeerInfo, List<ReplicableMessage>> pendingReplications = new ConcurrentHashMap<>();
+
+    /**
+     * Returns the machine's IPv4 address starting with "192.168.1.".
+     *
+     * @return the local IP address if found, otherwise a fallback string
+     * @throws SocketException if there is an issue accessing network interfaces
+     */
     public static String getCorrectIP() throws SocketException {
         return java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces()).stream()
                 .filter(i -> {
@@ -37,13 +84,19 @@ public class Server {
                 .orElse("IP not founded");
     }
 
-    // A buffer for updates that cannot yet be applied.
-    private final List<UpdateMessage> pendingUpdates = new ArrayList<>();
-
-    // Pending replications for omission failures.
-    private final Map<PeerInfo, List<ReplicableMessage>> pendingReplications = new ConcurrentHashMap<>();
-
-    // Modified constructor: now receives seed parameters.
+    /**
+     * Constructs a new server with all required configuration parameters.
+     *
+     * @param serverId           unique server identifier
+     * @param clientPort         port for client communication
+     * @param replicationPort    port for replication messages
+     * @param discoveryPort      port for peer discovery
+     * @param stateTransferPort  port for state transfer
+     * @param allServerIds       all known server IDs
+     * @param peerServers        initial peer list
+     * @param seedHost           address of seed server (nullable)
+     * @param seedDiscoveryPort  discovery port of the seed server
+     */
     public Server(String serverId, int clientPort, int replicationPort, int discoveryPort, int stateTransferPort,
                   Set<String> allServerIds, List<PeerInfo> peerServers,
                   String seedHost, int seedDiscoveryPort) {
@@ -60,6 +113,18 @@ public class Server {
         this.seedDiscoveryPort = seedDiscoveryPort;
     }
 
+    /**
+     * Starts all background services for the server:
+     * <ul>
+     *     <li>Client listener</li>
+     *     <li>Replication listener</li>
+     *     <li>Discovery listener</li>
+     *     <li>State transfer listener</li>
+     *     <li>Pending update checker</li>
+     *     <li>Replication retry thread</li>
+     * </ul>
+     * If a seed server is provided, it attempts to join the network.
+     */
     public void start() {
         // Start client listener thread.
         new Thread(new ClientListener(clientPort, this)).start();
@@ -91,8 +156,12 @@ public class Server {
     }
 
 
+    /**
+     * Sends a NEW_PEER message to all known peers to announce this server's presence.
+     * If delivery fails, the message is queued in {@code pendingReplications}.
+     */
     public void broadcastMyPresence() {
-        // Crea il proprio PeerInfo: assicurati di avere un getter per replicationPort e il serverId
+        // Create its own PeerInfo
         String selfHost;
         try {
             selfHost = getCorrectIP();
@@ -103,10 +172,10 @@ public class Server {
 
         ReplicableMessage newPeerMsg = new DiscoveryMessage(DiscoveryMessage.Type.NEW_PEER, selfPeer);
 
-        // Invia un messaggio NEW_PEER a ciascun peer conosciuto, ad eccezione di se stesso.
+        // Send NEW_PEER to all known peers, except itsself.
         for (PeerInfo peer : getPeerServers()) {
             if (!peer.getServerId().equals(this.serverId) && (seedPeer == null || !peer.equals(seedPeer))) {
-                // usa quella; qui supponiamo che ogni peer ascolti sul proprio discoveryPort.
+                // each peer listen to its discoveryPort.
                 int peerDiscoveryPort = peer.getDiscoveryPort();
                 new Thread(() -> {
                     try (Socket socket = new Socket(peer.getHost(), peerDiscoveryPort);
@@ -125,8 +194,11 @@ public class Server {
     }
 
 
-
-    // This method contacts the seed server and obtains the list of known peers.
+    /**
+     * Connects to the seed server and obtains the list of known peers via a JOIN_REQUEST.
+     * Updates local peer list and vector clock based on the response.
+     * Then broadcasts presence to the discovered peers.
+     */
     private void joinNetwork() {
         try (Socket socket = new Socket(seedHost, seedDiscoveryPort);
              ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
@@ -165,6 +237,11 @@ public class Server {
         broadcastMyPresence();
     }
 
+    /**
+     * Adds a new peer to the local peer list if not already present.
+     *
+     * @param peer the new peer to add
+     */
     public synchronized void addPeer(PeerInfo peer) {
         boolean exists = peerServers.stream()
                 .anyMatch(p -> p.getHost().equals(peer.getHost()) && p.getReplicationPort() == peer.getReplicationPort());
@@ -174,8 +251,10 @@ public class Server {
         }
     }
 
-
-    // Recover state from one of the known peers.
+    /**
+     * Attempts to recover the current state (key-value store and vector clock)
+     * from the first available peer in the list using a state transfer protocol.
+     */
     private void recoverState() {
         if (peerServers.isEmpty()) {
             System.out.println("No peers available for state recovery.");
@@ -210,7 +289,13 @@ public class Server {
         }
     }
 
-    // Methods to handle local writes from clients.
+    /**
+     * Handles a local write operation requested by a client.
+     * Increments the local vector clock, updates the store, and replicates the update.
+     *
+     * @param key   the key to write
+     * @param value the value to associate
+     */
     public synchronized void handleLocalWrite(String key, String value) {
         // Increment the local vector clock.
         localClock.increment(serverId);
@@ -223,6 +308,12 @@ public class Server {
         replicateUpdate(update);
     }
 
+    /**
+     * Sends the update message to all known peers.
+     * If a peer is unreachable, the message is queued for retry.
+     *
+     * @param update the update to replicate
+     */
     public void replicateUpdate(UpdateMessage update) {
         for (PeerInfo peer : peerServers) {
             new Thread(() -> {
@@ -238,6 +329,12 @@ public class Server {
         }
     }
 
+    /**
+     * Applies an update received from another server if the vector clock allows it.
+     * Otherwise, queues it in {@code pendingUpdates} until it can be applied.
+     *
+     * @param update the remote update to apply
+     */
     public synchronized void handleRemoteUpdate(UpdateMessage update) {
         if (localClock.canApply(update.getOriginServerId(), update.getVectorClock())) {
             keyValueStore.write(update.getKey(), update.getValue(), update.getVectorClock());
@@ -251,6 +348,9 @@ public class Server {
         }
     }
 
+    /**
+     * Checks the pending updates list and applies any update whose vector clock now allows it.
+     */
     public synchronized void checkPendingUpdates() {
         pendingUpdates.removeIf(pending -> {
             if (localClock.canApply(pending.getOriginServerId(), pending.getVectorClock())) {
@@ -263,9 +363,17 @@ public class Server {
         });
     }
 
+    /**
+     * Handles a local read request from a client.
+     *
+     * @param key the key to read
+     * @return the associated value, or {@code null} if not found
+     */
     public synchronized String handleLocalRead(String key) {
         return keyValueStore.read(key);
     }
+
+    // === Getters ===
 
     public String getServerId() {
         return serverId;
