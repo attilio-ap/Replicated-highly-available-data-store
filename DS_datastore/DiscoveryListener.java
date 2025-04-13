@@ -7,6 +7,23 @@ import java.util.*;
 public class DiscoveryListener implements Runnable {
     private Server server;
 
+    public static String getCorrectIP() throws SocketException {
+        return java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces()).stream()
+                .filter(i -> {
+                    try {
+                        return i.isUp() && !i.isLoopback() && !i.isVirtual();
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .flatMap(i -> java.util.Collections.list(i.getInetAddresses()).stream())
+                .filter(addr -> addr instanceof java.net.Inet4Address && addr.getHostAddress().startsWith("192.168.1."))
+                .map(java.net.InetAddress::getHostAddress)
+                .findFirst()
+                .orElse("IP not founded");
+    }
+
+
     public DiscoveryListener( Server server) {
         this.server = server;
     }
@@ -26,6 +43,7 @@ public class DiscoveryListener implements Runnable {
                                 // Crea il PeerInfo per il nuovo nodo usando serverId, host e replicationPort ricevuti.
                                 PeerInfo newPeer = new PeerInfo(msg.getServerId(), msg.getHost(), msg.getReplicationPort(), msg.getDiscoveryPort(), msg.getStateTransferPort());
                                 server.addPeer(newPeer);
+                                server.getLocalClock().addServer(newPeer.getServerId());
 
                                 // Prepara la lista dei peer da inviare come risposta.
                                 // Includi le informazioni del server che riceve la richiesta (cioè self) e gli altri peer già noti,
@@ -33,7 +51,7 @@ public class DiscoveryListener implements Runnable {
                                 List<PeerInfo> responseList = new ArrayList<>();
 
                                 // Ottieni l'host locale (puoi usare InetAddress.getLocalHost() oppure avere già salvato l'host nel Server).
-                                String selfHost = InetAddress.getLocalHost().getHostAddress();
+                                String selfHost = getCorrectIP();
                                 // Crea il PeerInfo per il server attuale (self).
                                 PeerInfo selfPeer = new PeerInfo(server.getServerId(), selfHost, server.getReplicationPort(), server.getDiscoveryPort(), server.getStateTransferPort());
                                 responseList.add(selfPeer);

@@ -8,7 +8,7 @@ public class ValueEntry implements Serializable {
 
     public ValueEntry(String value, VectorClock vClock) {
         this.value = value;
-        this.vClock = new VectorClock(vClock); // make a copy
+        this.vClock = vClock; // make a copy
     }
 
     public String getValue() {

@@ -12,7 +12,7 @@ public class UpdateMessage implements ReplicableMessage {
         this.key = key;
         this.value = value;
         this.originServerId = originServerId;
-        this.vectorClock = new VectorClock(vectorClock); // copy the VC
+        this.vectorClock = vectorClock; // copy the VC
     }
 
     public String getKey() { return key; }

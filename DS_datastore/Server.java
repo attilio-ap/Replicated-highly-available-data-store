@@ -21,6 +21,21 @@ public class Server {
     private int seedDiscoveryPort;   // Its discovery port
     private PeerInfo seedPeer;
 
+    public static String getCorrectIP() throws SocketException {
+        return java.util.Collections.list(java.net.NetworkInterface.getNetworkInterfaces()).stream()
+                .filter(i -> {
+                    try {
+                        return i.isUp() && !i.isLoopback() && !i.isVirtual();
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
+                .flatMap(i -> java.util.Collections.list(i.getInetAddresses()).stream())
+                .filter(addr -> addr instanceof java.net.Inet4Address && addr.getHostAddress().startsWith("192.168.1."))
+                .map(java.net.InetAddress::getHostAddress)
+                .findFirst()
+                .orElse("IP not founded");
+    }
 
     // A buffer for updates that cannot yet be applied.
     private final List<UpdateMessage> pendingUpdates = new ArrayList<>();
@@ -80,9 +95,9 @@ public class Server {
         // Crea il proprio PeerInfo: assicurati di avere un getter per replicationPort e il serverId
         String selfHost;
         try {
-            selfHost = InetAddress.getLocalHost().getHostAddress();
-        } catch (UnknownHostException e) {
-            selfHost = "localhost"; // fallback
+            selfHost = getCorrectIP();
+        } catch (SocketException e) {
+            throw new RuntimeException(e);
         }
         PeerInfo selfPeer = new PeerInfo(serverId, selfHost, replicationPort, discoveryPort, stateTransferPort);
 
@@ -228,7 +243,7 @@ public class Server {
             keyValueStore.write(update.getKey(), update.getValue(), update.getVectorClock());
             localClock.merge(update.getVectorClock());
             System.out.println(localClock.toString());
-            System.out.println("Remote update applied for key: " + update.getKey() + " value: " + update.getValue() + " VC: " + update.getVectorClock());
+            System.out.println("Remote update applied for key: " + update.getKey() + " value: " + update.getValue() + " Last Recived Message' VC: " + update.getVectorClock());
             checkPendingUpdates();
         } else {
             pendingUpdates.add(update);
