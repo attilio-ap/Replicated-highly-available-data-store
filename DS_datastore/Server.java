@@ -347,7 +347,7 @@ public class Server {
         if (localClock.dominates(update.getVectorClock())) {
             System.out.println("Ignored obsolete update for key "
                     + update.getKey() + " VC=" + update.getVectorClock());
-            return;   // niente altro da fare
+            return;
         }
 
     /* 2) Caso normale: verifico se posso applicarlo ora,
