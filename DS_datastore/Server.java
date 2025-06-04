@@ -138,59 +138,18 @@ public class Server {
         // Start state transfer listener thread.
         new Thread(new StateTransferListener(this)).start();
 
-        // Start a thread to check pending updates periodically.
-        new Thread(new PendingUpdateChecker(this)).start();
-
         // Start replication retry thread.
         new Thread(new ReplicationRetryThread(this)).start();
 
         // If seed is provided, join the network.
         if (seedHost != null && !seedHost.isEmpty()) {
             joinNetwork();
-        }
 
-        // Optionally recover state (if this server is restarting).
-        recoverState();
+            // Optionally recover state (if this server is restarting).
+            recoverState();
+        }
 
         System.out.println("Server " + serverId + " started.");
-    }
-
-
-    /**
-     * Sends a NEW_PEER message to all known peers to announce this server's presence.
-     * If delivery fails, the message is queued in {@code pendingReplications}.
-     */
-    public void broadcastMyPresence() {
-        // Create its own PeerInfo
-        String selfHost;
-        try {
-            selfHost = getCorrectIP();
-        } catch (SocketException e) {
-            throw new RuntimeException(e);
-        }
-        PeerInfo selfPeer = new PeerInfo(serverId, selfHost, replicationPort, discoveryPort, stateTransferPort);
-
-        ReplicableMessage newPeerMsg = new DiscoveryMessage(DiscoveryMessage.Type.NEW_PEER, selfPeer);
-
-        // Send NEW_PEER to all known peers, except itsself.
-        for (PeerInfo peer : getPeerServers()) {
-            if (!peer.getServerId().equals(this.serverId) && (seedPeer == null || !peer.equals(seedPeer))) {
-                // each peer listen to its discoveryPort.
-                int peerDiscoveryPort = peer.getDiscoveryPort();
-                new Thread(() -> {
-                    try (Socket socket = new Socket(peer.getHost(), peerDiscoveryPort);
-                         ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
-                        DiscoveryMessage msg = new DiscoveryMessage(DiscoveryMessage.Type.NEW_PEER, selfPeer);
-                        out.writeObject(msg);
-                        out.flush();
-                        System.out.println("Inviato NEW_PEER a " + peer);
-                    } catch (Exception e) {
-                        System.err.println("Errore durante il broadcast a " + peer + ": " + e.getMessage());
-                        pendingReplications.computeIfAbsent(peer, k -> new ArrayList<>()).add(newPeerMsg);
-                    }
-                }).start();
-            }
-        }
     }
 
 
@@ -237,6 +196,46 @@ public class Server {
         broadcastMyPresence();
     }
 
+
+    /**
+     * Sends a NEW_PEER message to all known peers to announce this server's presence.
+     * If delivery fails, the message is queued in {@code pendingReplications}.
+     */
+    public void broadcastMyPresence() {
+        // Create its own PeerInfo
+        String selfHost;
+        try {
+            selfHost = getCorrectIP();
+        } catch (SocketException e) {
+            throw new RuntimeException(e);
+        }
+        PeerInfo selfPeer = new PeerInfo(serverId, selfHost, replicationPort, discoveryPort, stateTransferPort);
+
+        ReplicableMessage newPeerMsg = new DiscoveryMessage(DiscoveryMessage.Type.NEW_PEER, selfPeer);
+
+        // Send NEW_PEER to all known peers, except itsself.
+        for (PeerInfo peer : getPeerServers()) {
+            if (!peer.getServerId().equals(this.serverId) && (seedPeer == null || !peer.equals(seedPeer))) {
+                // each peer listen to its discoveryPort.
+                int peerDiscoveryPort = peer.getDiscoveryPort();
+                new Thread(() -> {
+                    try (Socket socket = new Socket(peer.getHost(), peerDiscoveryPort);
+                         ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream())) {
+                        DiscoveryMessage msg = new DiscoveryMessage(DiscoveryMessage.Type.NEW_PEER, selfPeer);
+                        out.writeObject(msg);
+                        out.flush();
+                        System.out.println("Inviato NEW_PEER a " + peer);
+                    } catch (Exception e) {
+                        System.err.println("Errore durante il broadcast a " + peer + ": " + e.getMessage());
+                        pendingReplications.computeIfAbsent(peer, k -> new ArrayList<>()).add(newPeerMsg);
+                    }
+                }).start();
+            }
+        }
+    }
+
+
+
     /**
      * Adds a new peer to the local peer list if not already present.
      *
@@ -250,6 +249,8 @@ public class Server {
             System.out.println("Added new peer: " + peer.getHost() + ":" + peer.getReplicationPort());
         }
     }
+
+
 
     /**
      * Attempts to recover the current state (key-value store and vector clock)
@@ -288,6 +289,7 @@ public class Server {
             System.err.println("Failed to recover state from peer " + peer.getHost() + ": " + e.getMessage());
         }
     }
+
 
     /**
      * Handles a local write operation requested by a client.

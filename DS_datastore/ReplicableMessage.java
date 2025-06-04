@@ -13,5 +13,5 @@ import java.io.Serializable;
  * if needed in the future.
  */
 public interface ReplicableMessage extends Serializable {
-    // Common methods if necessary
+
 }
