@@ -162,7 +162,7 @@ public class Server {
 
             // Create and send a JOIN_REQUEST using DiscoveryMessage.
             DiscoveryMessage joinRequest = new DiscoveryMessage(DiscoveryMessage.Type.JOIN_REQUEST,
-                    serverId, InetAddress.getLocalHost().getHostAddress(), replicationPort, discoveryPort, stateTransferPort);
+                    serverId, getCorrectIP(), replicationPort, discoveryPort, stateTransferPort);
             out.writeObject(joinRequest);
             out.flush();
 

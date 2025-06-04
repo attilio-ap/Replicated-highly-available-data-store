@@ -83,7 +83,7 @@ public class DiscoveryListener implements Runnable {
 
                                 List<PeerInfo> responseList = new ArrayList<>();
 
-                                // Get the local host (you can use InetAddress.getLocalHost() or use the host already stored in the Server).
+                                // Get the local host.
                                 String selfHost = getCorrectIP();
                                 // Create the PeerInfo for the current server (self).
                                 PeerInfo selfPeer = new PeerInfo(server.getServerId(), selfHost, server.getReplicationPort(), server.getDiscoveryPort(), server.getStateTransferPort());

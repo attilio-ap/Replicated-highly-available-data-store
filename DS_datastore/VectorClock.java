@@ -120,18 +120,18 @@ public class VectorClock implements Serializable {
     }
 
     /**
-     * Ritorna true se *questa* VC è ≥ di un'altra per **tutti** i componenti.
-     * Utile per scartare update ormai inclusi nello snapshot.
+     * Returns true if *this* VC is ≥ another one for **all** components.
+     * Useful to discharge updates already included in the snapshot. Utile per scartare update ormai inclusi nello snapshot.
      */
     public synchronized boolean dominates(VectorClock other) {
         for (String id : other.clock.keySet()) {
             int thisTime   = clock.getOrDefault(id, 0);
             int otherTime  = other.clock.get(id);
             if (thisTime < otherTime) {
-                return false;        // c'è almeno un componente più vecchio
+                return false;        // there is at least an older component.
             }
         }
-        return true;                 // tutti i componenti >=
+        return true;                 // all components >=
     }
 
 
