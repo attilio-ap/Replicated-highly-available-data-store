@@ -34,7 +34,7 @@ public class UpdateMessage implements ReplicableMessage {
         this.key = key;
         this.value = value;
         this.originServerId = originServerId;
-        this.vectorClock = vectorClock; // copy the VC
+        this.vectorClock = new VectorClock(vectorClock); // copy the VC
     }
 
     /**
@@ -63,5 +63,5 @@ public class UpdateMessage implements ReplicableMessage {
      *
      * @return the update's vector clock
      */
-    public VectorClock getVectorClock() { return vectorClock; }
+    public VectorClock getVectorClock() { return new VectorClock(vectorClock); }
 }

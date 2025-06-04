@@ -144,11 +144,7 @@ public class Server {
         // If seed is provided, join the network.
         if (seedHost != null && !seedHost.isEmpty()) {
             joinNetwork();
-
-            // Optionally recover state (if this server is restarting).
-            recoverState();
         }
-
         System.out.println("Server " + serverId + " started.");
     }
 
@@ -158,7 +154,8 @@ public class Server {
      * Updates local peer list and vector clock based on the response.
      * Then broadcasts presence to the discovered peers.
      */
-    private void joinNetwork() {
+    private synchronized void joinNetwork() {
+
         try (Socket socket = new Socket(seedHost, seedDiscoveryPort);
              ObjectOutputStream out = new ObjectOutputStream(socket.getOutputStream());
              ObjectInputStream in = new ObjectInputStream(socket.getInputStream())) {
@@ -174,10 +171,14 @@ public class Server {
             if (responseObj instanceof DiscoveryMessage) {
                 DiscoveryMessage response = (DiscoveryMessage) responseObj;
                 if (response.getType() == DiscoveryMessage.Type.JOIN_RESPONSE) {
+
+
+
                     List<PeerInfo> discoveredPeers = response.getPeerList();
                     for (PeerInfo peer : discoveredPeers) {
 
-                        if(peer.getHost().equals(this.seedHost) && (peer.getDiscoveryPort()) == this.seedDiscoveryPort) {
+
+                        if( (peer.getHost().equals(this.seedHost)) && (peer.getDiscoveryPort() == this.seedDiscoveryPort)) {
                             this.seedPeer = peer;
                         }
 
@@ -186,14 +187,15 @@ public class Server {
                             localClock.addServer(peer.getServerId());
                         }
                     }
+
                     System.out.println("Joined network via seed. Discovered peers: " + discoveredPeers);
+                    broadcastMyPresence();
+                    recoverState();
                 }
             }
         } catch (Exception e) {
             System.err.println("Failed to join network via seed: " + e.getMessage());
         }
-
-        broadcastMyPresence();
     }
 
 
@@ -262,7 +264,7 @@ public class Server {
             return;
         }
         // Pick the first peer.
-        PeerInfo peer = peerServers.get(0);
+        PeerInfo peer = seedPeer;
         try {
             int peerStatePort = peer.getStateTransferPort();
             try (Socket socket = new Socket(peer.getHost(), peerStatePort);
@@ -289,6 +291,7 @@ public class Server {
             System.err.println("Failed to recover state from peer " + peer.getHost() + ": " + e.getMessage());
         }
     }
+
 
 
     /**
@@ -338,31 +341,68 @@ public class Server {
      * @param update the remote update to apply
      */
     public synchronized void handleRemoteUpdate(UpdateMessage update) {
-        if (localClock.canApply(update.getOriginServerId(), update.getVectorClock())) {
-            keyValueStore.write(update.getKey(), update.getValue(), update.getVectorClock());
+
+    /* 1) Se l’update è obsoleto (tutti i suoi timestamp ≤ al mio),
+          lo scarto immediatamente.                                   */
+        if (localClock.dominates(update.getVectorClock())) {
+            System.out.println("Ignored obsolete update for key "
+                    + update.getKey() + " VC=" + update.getVectorClock());
+            return;   // niente altro da fare
+        }
+
+    /* 2) Caso normale: verifico se posso applicarlo ora,
+          altrimenti lo metto in pending.                              */
+        if (localClock.canApply(update.getOriginServerId(),
+                update.getVectorClock())) {
+
+            keyValueStore.write(update.getKey(),
+                    update.getValue(),
+                    update.getVectorClock());
             localClock.merge(update.getVectorClock());
-            System.out.println(localClock.toString());
-            System.out.println("Remote update applied for key: " + update.getKey() + " value: " + update.getValue() + " Last Recived Message' VC: " + update.getVectorClock());
+
+            System.out.println(localClock);
+            System.out.println("Remote update applied for key: "
+                    + update.getKey() + " value: " + update.getValue()
+                    + " VC: " + update.getVectorClock());
+
             checkPendingUpdates();
+
         } else {
             pendingUpdates.add(update);
-            System.out.println("Remote update buffered for key: " + update.getKey());
+            System.out.println("Remote update buffered for key: "
+                    + update.getKey());
         }
     }
+
 
     /**
      * Checks the pending updates list and applies any update whose vector clock now allows it.
      */
+    /**
+     * Tenta di applicare tutti gli update pendenti finché
+     * non ci sono più progressi in un intero giro.
+     */
     public synchronized void checkPendingUpdates() {
-        pendingUpdates.removeIf(pending -> {
-            if (localClock.canApply(pending.getOriginServerId(), pending.getVectorClock())) {
-                keyValueStore.write(pending.getKey(), pending.getValue(), pending.getVectorClock());
-                localClock.merge(pending.getVectorClock());
-                System.out.println("Pending update applied for key: " + pending.getKey());
-                return true;
+        boolean progress;
+        do {
+            progress = false;
+            Iterator<UpdateMessage> it = pendingUpdates.iterator();
+            while (it.hasNext()) {
+                UpdateMessage pending = it.next();
+                if (localClock.canApply(pending.getOriginServerId(),
+                        pending.getVectorClock())) {
+
+                    keyValueStore.write(pending.getKey(),
+                            pending.getValue(),
+                            pending.getVectorClock());
+                    localClock.merge(pending.getVectorClock());
+                    it.remove();
+                    System.out.println("Pending update applied for key: "
+                            + pending.getKey());
+                    progress = true;
+                }
             }
-            return false;
-        });
+        } while (progress);
     }
 
     /**
